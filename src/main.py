@@ -50,6 +50,30 @@ def print_tree(node, indent=0):
     for child in node.children:
         print_tree(child, indent + 1)
 
+# ---------- Verify full-text deduplication ----------
+def verify_deduplication(pub_graph: Publication_Graph):
+    version_ids = list(pub_graph.hierarchy.keys())
+    print(f"Versions in graph: {version_ids}")
+    all_nodes = set(pub_graph.elements.keys())
+    print(f"Total unique nodes in elements: {len(all_nodes)}")
+
+    # Build a map: element_id -> list of versions where it appears
+    element_versions = {eid: [] for eid in all_nodes}
+    for v in version_ids:
+        for child_id in pub_graph.hierarchy[v]:
+            element_versions[child_id].append(v)
+
+    # Count nodes that appear in more than 1 version
+    shared_nodes = {eid: vers for eid, vers in element_versions.items() if len(vers) > 1}
+
+    print(f"Number of nodes shared across multiple versions: {len(shared_nodes)}")
+    if shared_nodes:
+        print("Sample shared nodes (element_id -> versions):")
+        for i, (eid, vers) in enumerate(shared_nodes.items()):
+            print(f"  {eid} -> {vers}")
+            if i >= 9:  # print max 10 examples
+                break
+
 # ---------- Main test ----------
 if __name__ == "__main__":
     # Example: paths to two versions
@@ -80,8 +104,14 @@ if __name__ == "__main__":
     for tree_root in all_trees:
         update_tree_cites(tree_root, key_map)
 
+    # 4. Build graph
     graph = Publication_Graph(pub_id="2212.11476")
     graph.add_tree(all_trees[0], version_index=1)
     graph.add_tree(all_trees[1], version_index=2)
 
+    # 5. Export JSON
     graph.export_json("hierarchy.json")
+
+    # 6. Verify full-text deduplication
+    print("\n--- Verifying full-text deduplication ---")
+    verify_deduplication(graph)

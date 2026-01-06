@@ -14,12 +14,31 @@ class Reference_Entry:
 
 # The code for parsing the reference inside bib
 def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
-    bib_database = bibtexparser.loads(content)
+    # 1️⃣ Fix bare values like `file = F` -> `file = {F}`
+    def wrap_bare_value(match):
+        field = match.group(1)
+        value = match.group(2).strip()
+        # nếu value chưa có {} hoặc ""
+        if not (value.startswith("{") or value.startswith('"')):
+            value = "{" + value + "}"
+        return f"{field} = {value}"
+
+    content_fixed = re.sub(r'(\w+)\s*=\s*([^,}]+)', wrap_bare_value, content)
+
+    parser = bibtexparser.bparser.BibTexParser(common_strings=True)
+    parser.ignore_nonstandard_types = True  # ignore unknown types/macros
+    try:
+        bib_database = bibtexparser.loads(content_fixed, parser=parser)
+    except Exception as e:
+        print(f"[WARN] Failed to parse .bib file: {e}")
+        return {}
+
     entries = {}
     for entry in bib_database.entries:
         key = entry.get('ID')
         entry_type = entry.get('ENTRYTYPE', 'misc')
-        fields = {k.lower(): v for k, v in entry.items() if k not in ['ID', 'ENTRYTYPE']}
+        # giữ nguyên tất cả fields, không lowercase để lưu đúng gốc
+        fields = {k: v for k, v in entry.items() if k not in ['ID', 'ENTRYTYPE']}
         entries[key] = Reference_Entry(key=key, entry_type=entry_type, fields=fields, source='bib')
     return entries
 
