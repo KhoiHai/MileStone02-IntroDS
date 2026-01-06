@@ -8,8 +8,8 @@ class Latex_Parser:
 
     def parse(self, text: str):
         # Pre cleaning
-        text = preprocess_text(text)         
-        text = extract_document_body(text)   
+        text = preprocess_text(text)
+        text = extract_document_body(text)
 
         paragraphs = split_into_paragraphs(text)
 
@@ -35,32 +35,31 @@ class Latex_Parser:
                 self.tree.add_hierarchy_node(level, title)
                 continue
 
-            # Theorem / Lemma
+            # Theorem
             if THEOREM_BEGIN_RE.match(first_line):
-                m_th = THEOREM_BEGIN_RE.match(first_line)
-                title = m_th.group(2) or "Theorem"
+                m = THEOREM_BEGIN_RE.match(first_line)
+                title = m.group(2) or "Theorem"
                 children = split_paragraph(block)
                 self.tree.add_container_node("Theorem", title, children)
                 continue
 
+            # Lemma
             if LEMMA_BEGIN_RE.match(first_line):
-                m_lm = LEMMA_BEGIN_RE.match(first_line)
-                title = m_lm.group(2) or "Lemma"
+                m = LEMMA_BEGIN_RE.match(first_line)
+                title = m.group(2) or "Lemma"
                 children = split_paragraph(block)
                 self.tree.add_container_node("Lemma", title, children)
                 continue
 
-            # Block math
-            if BLOCK_MATH_BEGIN_RE.search(first_line):
-                self.tree.add_leaf("Equation", block)
+            # Figure / Table (atomic blocks)
+            if FIGURE_BEGIN_RE.search(block_strip):
+                self.tree.add_leaf("Figure", block_strip)
                 continue
 
-            # Figure / Table
-            if FIGURE_BEGIN_RE.search(first_line) or TABLE_BEGIN_RE.search(first_line):
-                self.tree.add_leaf("Figure", block)
+            if TABLE_BEGIN_RE.search(block_strip):
+                self.tree.add_leaf("Table", block_strip)
                 continue
 
-            # Regular paragraph
             for node_type, content in split_paragraph(block):
                 self.tree.add_leaf(node_type, content)
 

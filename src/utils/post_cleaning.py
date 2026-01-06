@@ -1,6 +1,6 @@
 import re
 
-# Structural Regex
+# Structural environment
 STRUCTURAL_BEGIN_RE = re.compile(
     r"""
     \\begin\{
@@ -21,7 +21,7 @@ STRUCTURAL_END_RE = re.compile(
     re.VERBOSE | re.DOTALL
 )
 
-# Formating or Useless Command Regex
+# Formating and useless command
 USELESS_COMMANDS_RE = re.compile(
     r"""
     \\centering|
@@ -51,45 +51,80 @@ USELESS_COMMANDS_RE = re.compile(
 
 FLOAT_SPEC_RE = re.compile(r"\[[htbpH!]+\]")
 
-# Latex Command Regex
-ANY_COMMAND_RE = re.compile(
+MULTISPACE_RE = re.compile(r"\s+")
+
+CONTROL_COMMANDS_RE = re.compile(
     r"""
-    \\[a-zA-Z]+        # \command
-    (\*?)              # optional *
-    (\[[^\]]*\])?     # optional [...]
-    (\{[^}]*\})?      # optional {...}
+    \\(ifpreprint|fi|clearpage|newpage|ignorespaces)
+    """,
+    re.VERBOSE
+)
+
+# Check the inline math to not to delete the command inside
+INLINE_MATH_RE = re.compile(
+    r"""
+    (\${1,2}.*?\${1,2}     # $...$ or $$...$$
+    |\\\(.*?\\\)          # \( ... \)
+    |\\\[.*?\\\])         # \[ ... \]
     """,
     re.VERBOSE | re.DOTALL
 )
 
-MULTISPACE_RE = re.compile(r"\s+")
-
-# Clean the sentence
+# Post cleaning the sentence
 def clean_sentence(text: str) -> str:
     if not text:
         return ""
 
     s = text.strip()
 
-    # 0. Early reject: raw LaTeX command → DROP
-    if ANY_COMMAND_RE.search(s):
-        return ""
+    # Keep the math block
+    math_blocks = []
 
-    # 1. remove structural begin/end (safety)
+    def _protect_math(m):
+        math_blocks.append(m.group(0))
+        return f"__MATH_{len(math_blocks)-1}__"
+
+    s = INLINE_MATH_RE.sub(_protect_math, s)
+
+    # Remove the structural wrapper but keeping the content
     s = STRUCTURAL_BEGIN_RE.sub("", s)
     s = STRUCTURAL_END_RE.sub("", s)
 
-    # 2. remove useless formatting commands
+    # Removing useless command
     s = USELESS_COMMANDS_RE.sub("", s)
 
-    # 3. remove float specifiers
+    # Removing float specifiers
     s = FLOAT_SPEC_RE.sub("", s)
 
-    # 4. FINAL CHECK: nếu cleanup xong mà vẫn còn command → DROP
-    if ANY_COMMAND_RE.search(s):
-        return ""
+    # Unwrap the text formating
+    s = re.sub(
+        r"\\(text|emph|textbf|textit|underline)\{([^}]*)\}",
+        r"\2",
+        s
+    )
 
-    # 5. normalize whitespace
+    # Unwrap the metadata
+    s = re.sub(r"\\keywords\{([^}]*)\}", r"\1", s)
+    s = re.sub(r"\\amscode\{[^}]*\}", "", s)
+
+    # Removing control command 
+    s = CONTROL_COMMANDS_RE.sub("", s)
+    s = re.sub(
+        r"\\[a-zA-Z]+\*?(?:\[[^\]]*\])?\{([^}]*)\}",
+        r"\1",
+        s
+    )
+
+    s = re.sub(r"\\[a-zA-Z]+\*?", "", s)
+
+    # Normalize space
     s = MULTISPACE_RE.sub(" ", s).strip()
 
+    # Restore the math blocks
+    for i, m in enumerate(math_blocks):
+        s = s.replace(f"__MATH_{i}__", m)
+
+    if len(s) < 1:
+        return ""
+    
     return s
