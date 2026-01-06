@@ -1,4 +1,6 @@
 from utils.post_cleaning import *
+import re
+from typing import Dict, List 
 
 # Class for Node
 class Node:
@@ -39,6 +41,19 @@ class Node:
             cleaned.append(child)
 
         self.children = cleaned
+
+    def update_cite_keys(self, key_map: Dict[str, str]):
+        CITE_RE = re.compile(r'\\cite\{([^}]+)\}')
+        
+        if self.is_leaf() and self.node_type == "Sentence":
+            def repl(m):
+                old_keys = [k.strip() for k in m.group(1).split(",")]
+                new_keys = [key_map.get(k, k) for k in old_keys]
+                return r"\cite{" + ",".join(new_keys) + "}"
+            self.content = CITE_RE.sub(repl, self.content)
+        
+        for child in self.children:
+            child.update_cite_keys(key_map)
 
     def report(self):
         if self.is_leaf():
