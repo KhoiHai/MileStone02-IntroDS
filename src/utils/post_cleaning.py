@@ -1,13 +1,13 @@
 import re
 
-# Structural environment
+
+# Structural Environment
 STRUCTURAL_BEGIN_RE = re.compile(
     r"""
     \\begin\{
         (abstract|theorem|lemma|proof|remark|definition|example)
     \}
     (?:\[[^\]]*\])?
-    (?:\\label\{[^}]*\})?
     """,
     re.VERBOSE | re.DOTALL
 )
@@ -21,7 +21,7 @@ STRUCTURAL_END_RE = re.compile(
     re.VERBOSE | re.DOTALL
 )
 
-# Formating and useless command
+# Formatting and Useless Command
 USELESS_COMMANDS_RE = re.compile(
     r"""
     \\centering|
@@ -50,7 +50,6 @@ USELESS_COMMANDS_RE = re.compile(
 )
 
 FLOAT_SPEC_RE = re.compile(r"\[[htbpH!]+\]")
-
 MULTISPACE_RE = re.compile(r"\s+")
 
 CONTROL_COMMANDS_RE = re.compile(
@@ -60,7 +59,8 @@ CONTROL_COMMANDS_RE = re.compile(
     re.VERBOSE
 )
 
-# Check the inline math to not to delete the command inside
+
+# Inline Math should not be cleaned
 INLINE_MATH_RE = re.compile(
     r"""
     (\${1,2}.*?\${1,2}     # $...$ or $$...$$
@@ -70,14 +70,23 @@ INLINE_MATH_RE = re.compile(
     re.VERBOSE | re.DOTALL
 )
 
-# Post cleaning the sentence
+# This is labeling and reference should not be cleaned
+SEMANTIC_COMMAND_RE = re.compile(
+    r"""
+    \\(label|ref|eqref|cite|citep|citet)
+    (\[[^\]]*\])?
+    \{[^}]*\}
+    """,
+    re.VERBOSE
+)
+
+# Post cleaning
 def clean_sentence(text: str) -> str:
     if not text:
         return ""
 
     s = text.strip()
 
-    # Keep the math block
     math_blocks = []
 
     def _protect_math(m):
@@ -86,45 +95,44 @@ def clean_sentence(text: str) -> str:
 
     s = INLINE_MATH_RE.sub(_protect_math, s)
 
-    # Remove the structural wrapper but keeping the content
+    semantic_blocks = []
+
+    def _protect_semantic(m):
+        semantic_blocks.append(m.group(0))
+        return f"__SEM_{len(semantic_blocks)-1}__"
+
+    s = SEMANTIC_COMMAND_RE.sub(_protect_semantic, s)
+
     s = STRUCTURAL_BEGIN_RE.sub("", s)
     s = STRUCTURAL_END_RE.sub("", s)
 
-    # Removing useless command
     s = USELESS_COMMANDS_RE.sub("", s)
-
-    # Removing float specifiers
     s = FLOAT_SPEC_RE.sub("", s)
+    s = CONTROL_COMMANDS_RE.sub("", s)
 
-    # Unwrap the text formating
     s = re.sub(
         r"\\(text|emph|textbf|textit|underline)\{([^}]*)\}",
         r"\2",
         s
     )
 
-    # Unwrap the metadata
     s = re.sub(r"\\keywords\{([^}]*)\}", r"\1", s)
     s = re.sub(r"\\amscode\{[^}]*\}", "", s)
 
-    # Removing control command 
-    s = CONTROL_COMMANDS_RE.sub("", s)
     s = re.sub(
         r"\\[a-zA-Z]+\*?(?:\[[^\]]*\])?\{([^}]*)\}",
         r"\1",
         s
     )
 
+    # Remove leftover commands without arguments
     s = re.sub(r"\\[a-zA-Z]+\*?", "", s)
-
-    # Normalize space
     s = MULTISPACE_RE.sub(" ", s).strip()
 
-    # Restore the math blocks
+    for i, m in enumerate(semantic_blocks):
+        s = s.replace(f"__SEM_{i}__", m)
+
     for i, m in enumerate(math_blocks):
         s = s.replace(f"__MATH_{i}__", m)
 
-    if len(s) < 1:
-        return ""
-    
-    return s
+    return s if s else ""
