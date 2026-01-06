@@ -38,7 +38,7 @@ def print_tree(node, indent=0):
 
 
 if __name__ == "__main__":
-    tex_dir = "../demo-data/2212-11478/tex/2212.11478v2"
+    tex_dir = "../demo-data/2212-11476/tex/2212.11476v2"
     tree_root = build_document_tree(tex_dir)
 
     if tree_root:

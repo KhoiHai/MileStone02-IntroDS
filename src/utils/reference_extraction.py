@@ -3,6 +3,9 @@ import re
 from dataclasses import dataclass
 from typing import Dict
 
+# ----------------------------
+# Class for containing a reference
+# ----------------------------
 @dataclass
 class Reference_Entry:
     key: str
@@ -10,48 +13,87 @@ class Reference_Entry:
     fields: Dict[str, str]
     source: str
 
-# Regex \bibitem block
+# ----------------------------
+# Regex for .bib parsing
+# ----------------------------
+BIB_ENTRY_RE = re.compile(
+    r'@(\w+)\s*\{\s*([^,]+)\s*,(.*?)\n\}', 
+    re.DOTALL
+)
+BIB_FIELD_RE = re.compile(
+    r'(\w+)\s*=\s*[\{"]([^}"]+)[\}"]', 
+    re.DOTALL
+)
+
+# ----------------------------
+# Regex for \bibitem parsing
+# ----------------------------
 BIBITEM_RE = re.compile(
-    r'\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}(.*?)(?=\\bibitem|\Z)',
+    r'\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}(.*?)(?=\\bibitem|\Z)', 
     re.DOTALL
 )
 
-# Title regex: LaTeX ``title'' or ASCII quotes "title" or smart quotes “title”
+# Regex for title detection (handles LaTeX quotes, ASCII quotes, smart quotes, trailing commas)
 TITLE_RE = re.compile(
-    r'``([^`]+)\'\'|'      # LaTeX quotes
-    r'"([^"]+)"|'           # ASCII quotes
-    r'“([^”]+)”',           # smart quotes
+    r'``(.*?)\'\'|'      # LaTeX ``title'' 
+    r'``(.*?)",|'        # LaTeX ``title",  (trailing comma)
+    r'"(.*?)",'          # ASCII quotes with comma
+    r'“(.*?)”|'          # Unicode smart quotes
+    r'"(.*?)"',           # ASCII quotes without comma
     re.DOTALL
 )
 
-# Heuristic parse
+# ----------------------------
+# Parse .bib file content
+# ----------------------------
+def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
+    entries = {}
+    for m in BIB_ENTRY_RE.finditer(content):
+        entry_type = m.group(1).lower()
+        key = m.group(2).strip()
+        body = m.group(3)
+        fields = {}
+        for f in BIB_FIELD_RE.finditer(body):
+            fields[f.group(1).lower()] = f.group(2).strip()
+        entries[key] = Reference_Entry(key=key, entry_type=entry_type, fields=fields, source="bib")
+    return entries
+
+# ----------------------------
+# Heuristic parser for \bibitem text
+# ----------------------------
 def heuristic_parse_reference(text: str) -> Dict[str, str]:
     fields = {}
 
-    # Title first
+    # Year detection
+    year_match = re.search(r'(19|20)\d{2}', text)
+    if year_match:
+        fields["year"] = year_match.group(0)
+
+    # Title detection
     title_match = TITLE_RE.search(text)
     if title_match:
+        # pick the first non-None group
         title = next(g for g in title_match.groups() if g)
-        fields["title"] = title.strip()
+        fields["title"] = title.strip().rstrip(",")  # remove trailing comma
 
-        # Author is everything before title
-        title_pos = text.find(title)
+    # Author detection: everything before the title
+    if "title" in fields:
+        title_pos = text.find(fields["title"])
         if title_pos > 0:
             author_text = text[:title_pos].rstrip(", ").strip()
             fields["author"] = author_text
+        else:
+            fields["author"] = text.split(",")[0].strip()
     else:
         # fallback: first part before comma
         parts = text.split(",", 1)
         fields["author"] = parts[0].strip() if parts else ""
 
-    # Year
-    year_match = re.search(r'(19|20)\d{2}', text)
-    if year_match:
-        fields["year"] = year_match.group(0)
-
     return fields
 
+# ----------------------------
 # Parse \bibitem blocks
+# ----------------------------
 def parse_bibitem_block(content: str) -> Dict[str, Reference_Entry]:
     refs = {}
     for m in BIBITEM_RE.finditer(content):
@@ -61,15 +103,26 @@ def parse_bibitem_block(content: str) -> Dict[str, Reference_Entry]:
         refs[key] = Reference_Entry(key=key, entry_type="misc", fields=fields, source="bibitem")
     return refs
 
-# Collect references
+# ----------------------------
+# Collect references from .bib and .tex files
+# ----------------------------
 def collect_references(tex_files) -> Dict[str, Reference_Entry]:
     references = {}
+
+    # First, parse any .bib files
+    for f in tex_files:
+        if f.endswith(".bib") and os.path.exists(f):
+            with open(f, encoding="utf-8", errors="ignore") as fp:
+                references.update(parse_bibtex(fp.read()))
+
+    # Then parse \bibitem in .tex files
     for f in tex_files:
         if f.endswith(".tex") and os.path.exists(f):
             with open(f, encoding="utf-8", errors="ignore") as fp:
                 content = fp.read()
             if "\\bibitem" in content:
                 references.update(parse_bibitem_block(content))
+
     return references
 
 if __name__ == "__main__":

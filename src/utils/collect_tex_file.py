@@ -68,7 +68,7 @@ def collect_tex_file(tex_dir):
     return main_tex, sorted(used_files)
 
 if __name__ == "__main__":
-    tex_dir = "../../demo-data/2212-11482/tex/2212.11482v1"
+    tex_dir = "../../demo-data/2212-11476/tex/2212.11476v1"
     main_tex, used_files = collect_tex_file(tex_dir)
 
     print("Main file:", main_tex)
