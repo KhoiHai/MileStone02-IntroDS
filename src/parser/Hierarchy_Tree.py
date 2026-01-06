@@ -61,10 +61,16 @@ class Node:
             count += child.count_nodes()
         return count
 
+    '''
     def report(self):
         if self.is_leaf():
             return f"<{self.node_type}: {self.content}>"
         return f"<{self.node_type}: {self.title}>"
+    '''
+    def report(self):
+        if self.is_leaf():
+            return f"{self.content}"
+        return f"{self.title}"
 
 # Class for Hierarchy Tree 
 class Hierarchy_Tree:
