@@ -53,8 +53,8 @@ def print_tree(node, indent=0):
 if __name__ == "__main__":
     # Example: paths to two versions
     versions = [
-        "../demo-data/2212-11476/tex/2212.11476v1",
-        "../demo-data/2212-11476/tex/2212.11476v2"
+        "../demo-data/2212-11479/tex/2212.11479v1",
+        "../demo-data/2212-11479/tex/2212.11479v2"
     ]
 
     all_trees = []

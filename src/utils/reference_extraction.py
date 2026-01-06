@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict
 import bibtexparser
 
-# Class for reference
+# Class for storing reference
 @dataclass
 class Reference_Entry:
     key: str
@@ -12,110 +12,102 @@ class Reference_Entry:
     fields: Dict[str, str]
     source: str
 
-# Regex for .bib parsing
-BIB_ENTRY_RE = re.compile(
-    r'@(\w+)\s*\{\s*([^,]+)\s*,(.*?)\n\}', 
-    re.DOTALL
-)
-BIB_FIELD_RE = re.compile(
-    r'(\w+)\s*=\s*[\{"]([^}"]+)[\}"]', 
-    re.DOTALL
-)
-
-# Regex for \bibitem parsing
-BIBITEM_RE = re.compile(
-    r'\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}(.*?)(?=\\bibitem|\Z)', 
-    re.DOTALL
-)
-
-# Regex for title detection (handles LaTeX quotes, ASCII quotes, smart quotes, trailing commas)
-TITLE_RE = re.compile(
-    r'``(.*?)\'\'|'      # LaTeX ``title'' 
-    r'``(.*?)",|'        # LaTeX ``title",  (trailing comma)
-    r'"(.*?)",'          # ASCII quotes with comma
-    r'“(.*?)”|'          # Unicode smart quotes
-    r'"(.*?)"',           # ASCII quotes without comma
-    re.DOTALL
-)
-
-# Parse .bib file content
+# The code for parsing the reference inside bib
 def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
     bib_database = bibtexparser.loads(content)
     entries = {}
-
     for entry in bib_database.entries:
-        key = entry.get('ID')  # BibTeX key
-        entry_type = entry.get('ENTRYTYPE', 'misc')  # type like article, book, misc
-        # copy all other fields except ID and ENTRYTYPE
+        key = entry.get('ID')
+        entry_type = entry.get('ENTRYTYPE', 'misc')
         fields = {k.lower(): v for k, v in entry.items() if k not in ['ID', 'ENTRYTYPE']}
         entries[key] = Reference_Entry(key=key, entry_type=entry_type, fields=fields, source='bib')
-
     return entries
 
-# Heuristic parser for \bibitem text
-def heuristic_parse_reference(text: str) -> Dict[str, str]:
-    fields = {}
+# Code for helping cleaning before parsing the tex reference
+def clean_latex(text: str) -> str:
+    if not text: return ""
+    text = re.sub(r'\\\w+\{(.*?)\}', r'\1', text)
+    text = text.replace('{', '').replace('}', '')
+    text = text.replace('~', ' ')
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
-    # Year detection
-    year_match = re.search(r'(19|20)\d{2}', text)
-    if year_match:
-        fields["year"] = year_match.group(0)
+# Parsing a single \bibiitem
+def parse_single_bibitem(key: str, text: str) -> Reference_Entry:
+    text = " ".join(text.split())  # normalize whitespace
 
-    # Title detection
-    title_match = TITLE_RE.search(text)
+    # Searching for matching with title
+    title_match = re.search(r'``(.*?)(?:\'\'|,"|")', text)
     if title_match:
-        # pick the first non-None group
-        title = next(g for g in title_match.groups() if g)
-        fields["title"] = title.strip().rstrip(",")  # remove trailing comma
-
-    # Author detection: everything before the title
-    if "title" in fields:
-        title_pos = text.find(fields["title"])
-        if title_pos > 0:
-            author_text = text[:title_pos].rstrip(", ").strip()
-            fields["author"] = author_text
-        else:
-            fields["author"] = text.split(",")[0].strip()
+        title = title_match.group(1).strip()
+        author_part = text[:title_match.start()]
+        remainder = text[title_match.end():]
     else:
-        # fallback: first part before comma
-        parts = text.split(",", 1)
-        fields["author"] = parts[0].strip() if parts else ""
+        parts = text.split(',', 1)
+        author_part = parts[0]
+        remainder = parts[1] if len(parts) > 1 else ""
+        title = ""
 
-    return fields
+    # Determine the year
+    years = re.findall(r'\b(?:19|20)\d{2}\b', text)
+    year = years[-1] if years else ""
 
-# Parse \bibitem blocks
+    # Journal
+    journal_match = re.search(r'\\textit\{(.*?)\}', text)
+    journal = journal_match.group(1) if journal_match else ""
+    if not journal and "," in remainder:
+        journal_candidate = remainder.split(',')[0].strip()
+        if journal_candidate:
+            journal = journal_candidate
+
+    fields = {
+        "author": clean_latex(author_part).rstrip(',').strip(),
+        "title": clean_latex(title),
+        "year": year,
+        "journal": clean_latex(journal).rstrip(',').strip()
+    }
+
+    return Reference_Entry(key=key, entry_type="article", fields=fields, source="bibitem")
+
+# parse every bibitem
 def parse_bibitem_block(content: str) -> Dict[str, Reference_Entry]:
     refs = {}
-    for m in BIBITEM_RE.finditer(content):
+    content = re.sub(r'%.*', '', content)
+    content = content.replace('\n', ' ')
+
+    pattern = r'\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}(.*?)(?=\\bibitem|\\end\{thebibliography\}|$)'
+    matches = re.finditer(pattern, content)
+
+    for m in matches:
         key = m.group(1).strip()
         text = m.group(2).strip()
-        fields = heuristic_parse_reference(text)
-        refs[key] = Reference_Entry(key=key, entry_type="misc", fields=fields, source="bibitem")
+        refs[key] = parse_single_bibitem(key, text)
     return refs
 
-# Collect references from .bib and .tex files
+# Collect references
 def collect_references(tex_files) -> Dict[str, Reference_Entry]:
     references = {}
 
-    # First, parse any .bib files
+    # 1. Parse .bib files
     for f in tex_files:
         if f.endswith(".bib") and os.path.exists(f):
             with open(f, encoding="utf-8", errors="ignore") as fp:
                 references.update(parse_bibtex(fp.read()))
 
-    # Then parse \bibitem in .tex files
+    # 2. Parse \bibitem in .tex files
     for f in tex_files:
         if f.endswith(".tex") and os.path.exists(f):
             with open(f, encoding="utf-8", errors="ignore") as fp:
                 content = fp.read()
             if "\\bibitem" in content:
+                print(f"Parsing bibitems in {f}")
                 references.update(parse_bibitem_block(content))
 
     return references
 
 if __name__ == "__main__":
     tex_path = [
-        "../../demo-data/2212-11476/tex/2212.11476v1/ref.bib"
+        "../../demo-data/2212-11479/tex/2212.11479v1/DifferentialPrivate_Social_network.tex"
     ]
     refs = collect_references(tex_path)
     for k, v in refs.items():
