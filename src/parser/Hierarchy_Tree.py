@@ -55,6 +55,12 @@ class Node:
         for child in self.children:
             child.update_cite_keys(key_map)
 
+    def count_nodes(self) -> int:
+        count = 1 
+        for child in self.children:
+            count += child.count_nodes()
+        return count
+
     def report(self):
         if self.is_leaf():
             return f"<{self.node_type}: {self.content}>"
@@ -90,6 +96,9 @@ class Hierarchy_Tree:
     def add_leaf(self, node_type, content):
         node = Node(node_type, content=content)
         self.stack[-1].add_child(node)
+
+    def total_nodes(self) -> int:
+        return self.root.count_nodes()
 
     def _level(self, level):
         return {
