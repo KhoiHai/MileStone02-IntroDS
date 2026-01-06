@@ -1,5 +1,5 @@
 import re
-from .cleaning import *
+from .pre_cleaning import *
 
 # Chapter, section, subsection and subsubsection regex
 CHAPTER_RE = re.compile(r'\\chapter\*?\{(.+?)\}')
@@ -34,6 +34,10 @@ THEOREM_END_RE = re.compile(r'\\end\{theorem\}')
 LEMMA_BEGIN_RE = re.compile(r'\\begin\{lemma\}(\[(.*?)\])?')
 LEMMA_END_RE = re.compile(r'\\end\{lemma\}')
 
+# Begin and end of the document
+BEGIN_DOCUMENT_RE = re.compile(r"\\begin\{document\}")
+END_DOCUMENT_RE = re.compile(r"\\end\{document\}")
+
 # Split the text into paragraphs
 def split_into_paragraphs(text):
     lines = text.splitlines()
@@ -50,6 +54,20 @@ def split_into_paragraphs(text):
     if current:
         paragraphs.append("\n".join(current))
     return paragraphs
+
+# Extract the document body
+def extract_document_body(text: str) -> str:
+    begin = BEGIN_DOCUMENT_RE.search(text)
+    if not begin:
+        return text 
+
+    start = begin.end()
+
+    end = END_DOCUMENT_RE.search(text, start)
+    if end:
+        return text[start:end.start()]
+
+    return text[start:]
 
 # Parse the title if the node has 
 def parse_title(line):

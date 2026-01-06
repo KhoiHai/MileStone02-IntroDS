@@ -1,3 +1,5 @@
+from utils.post_cleaning import *
+
 # Class for Node
 class Node:
     def __init__(self, node_type, title=None, content=None):
@@ -11,6 +13,32 @@ class Node:
 
     def is_leaf(self):
         return self.content is not None
+    
+    def clean_children(self):
+        cleaned = []
+
+        for child in self.children:
+            child.clean_children()
+
+            if child.is_leaf():
+                content = child.content.strip()
+
+                if content.startswith('%'):
+                    continue
+                
+                # Clean the sentence
+                if child.node_type == "Sentence":
+                    content = clean_sentence(content)
+                    if not content:
+                        continue
+                    child.content = content
+
+                if not content:
+                    continue
+
+            cleaned.append(child)
+
+        self.children = cleaned
 
     def report(self):
         if self.is_leaf():

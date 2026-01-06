@@ -1,4 +1,5 @@
 from utils.parsing import *
+from utils.post_cleaning import *
 from .Hierarchy_Tree import Node, Hierarchy_Tree
 
 class Latex_Parser:
@@ -6,8 +7,11 @@ class Latex_Parser:
         self.tree = Hierarchy_Tree()
 
     def parse(self, text: str):
-        cleaned_text = preprocess_text(text)
-        paragraphs = split_into_paragraphs(cleaned_text)
+        # Pre cleaning
+        text = preprocess_text(text)         
+        text = extract_document_body(text)   
+
+        paragraphs = split_into_paragraphs(text)
 
         for block in paragraphs:
             block_strip = block.strip()
@@ -60,4 +64,6 @@ class Latex_Parser:
             for node_type, content in split_paragraph(block):
                 self.tree.add_leaf(node_type, content)
 
+        # Post cleaning
+        self.tree.root.clean_children()
         return self.tree.root
