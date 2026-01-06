@@ -23,17 +23,16 @@ class Publication_Parser:
         self.graph = Publication_Graph(pub_id=pub_id)
 
     def parse_dataset(self):
-        """Quét tất cả version, build tree, collect references"""
         tex_root = os.path.join(self.pub_path, "tex")
         if not os.path.exists(tex_root):
             print(f"[WARN] No tex folder in {self.pub_path}")
             return
 
-        # 1️⃣ Tìm tất cả version
+        # Find all version
         versions = [f for f in os.listdir(tex_root) if os.path.isdir(os.path.join(tex_root, f))]
         versions.sort()
 
-        # 2️⃣ Build tree và collect reference cho từng version
+        # Build the tree and collect the reference
         for idx, v in enumerate(versions, start=1):
             version_path = os.path.join(tex_root, v)
             print(f"[INFO] Processing version {v}")
@@ -66,15 +65,15 @@ class Publication_Parser:
             refs = collect_references(all_files)
             self.references.update(refs)
 
-        # 3️⃣ Deduplicate references across all versions
+        # Deduplicate references across all versions
         canonical_refs, key_map, _ = deduplicate_references(self.references)
         self.references = canonical_refs
 
-        # 4️⃣ Update \cite{} in all trees according to canonical references
+        # Update \cite{} in all trees according to canonical references
         for tree_root in self.trees:
             tree_root.update_cite_keys(key_map)
 
-        # 5️⃣ Add all trees to graph (full-text dedup works here)
+        # Add all trees to graph (full-text dedup works here)
         for idx, tree_root in enumerate(self.trees, start=1):
             self.graph.add_tree(tree_root, version_index=idx)
 

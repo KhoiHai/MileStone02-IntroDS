@@ -14,11 +14,10 @@ class Reference_Entry:
 
 # The code for parsing the reference inside bib
 def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
-    # 1️⃣ Fix bare values like `file = F` -> `file = {F}`
+    # Fix bare values like `file = F` -> `file = {F}`
     def wrap_bare_value(match):
         field = match.group(1)
         value = match.group(2).strip()
-        # nếu value chưa có {} hoặc ""
         if not (value.startswith("{") or value.startswith('"')):
             value = "{" + value + "}"
         return f"{field} = {value}"
@@ -37,7 +36,6 @@ def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
     for entry in bib_database.entries:
         key = entry.get('ID')
         entry_type = entry.get('ENTRYTYPE', 'misc')
-        # giữ nguyên tất cả fields, không lowercase để lưu đúng gốc
         fields = {k: v for k, v in entry.items() if k not in ['ID', 'ENTRYTYPE']}
         entries[key] = Reference_Entry(key=key, entry_type=entry_type, fields=fields, source='bib')
     return entries
