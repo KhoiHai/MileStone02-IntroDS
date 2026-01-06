@@ -69,13 +69,11 @@ if __name__ == "__main__":
         all_refs.update(refs)
 
     # 2. Deduplicate references to create canonical keys
-    canonical_refs, key_map = deduplicate_references(all_refs)
+    canonical_refs, key_map, simlist = deduplicate_references(all_refs)
 
-    '''
     print("\n--- Canonical References ---")
     for cid, ref in canonical_refs.items():
         print(f"[{ref.source}] {ref.key} -> fields: {ref.fields}")
-    '''
 
     # 3. Update \cite{} in all trees
     for tree_root in all_trees:

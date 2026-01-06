@@ -2,10 +2,9 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Dict
+import bibtexparser
 
-# ----------------------------
-# Class for containing a reference
-# ----------------------------
+# Class for reference
 @dataclass
 class Reference_Entry:
     key: str
@@ -13,9 +12,7 @@ class Reference_Entry:
     fields: Dict[str, str]
     source: str
 
-# ----------------------------
 # Regex for .bib parsing
-# ----------------------------
 BIB_ENTRY_RE = re.compile(
     r'@(\w+)\s*\{\s*([^,]+)\s*,(.*?)\n\}', 
     re.DOTALL
@@ -25,9 +22,7 @@ BIB_FIELD_RE = re.compile(
     re.DOTALL
 )
 
-# ----------------------------
 # Regex for \bibitem parsing
-# ----------------------------
 BIBITEM_RE = re.compile(
     r'\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}(.*?)(?=\\bibitem|\Z)', 
     re.DOTALL
@@ -43,24 +38,21 @@ TITLE_RE = re.compile(
     re.DOTALL
 )
 
-# ----------------------------
 # Parse .bib file content
-# ----------------------------
 def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
+    bib_database = bibtexparser.loads(content)
     entries = {}
-    for m in BIB_ENTRY_RE.finditer(content):
-        entry_type = m.group(1).lower()
-        key = m.group(2).strip()
-        body = m.group(3)
-        fields = {}
-        for f in BIB_FIELD_RE.finditer(body):
-            fields[f.group(1).lower()] = f.group(2).strip()
-        entries[key] = Reference_Entry(key=key, entry_type=entry_type, fields=fields, source="bib")
+
+    for entry in bib_database.entries:
+        key = entry.get('ID')  # BibTeX key
+        entry_type = entry.get('ENTRYTYPE', 'misc')  # type like article, book, misc
+        # copy all other fields except ID and ENTRYTYPE
+        fields = {k.lower(): v for k, v in entry.items() if k not in ['ID', 'ENTRYTYPE']}
+        entries[key] = Reference_Entry(key=key, entry_type=entry_type, fields=fields, source='bib')
+
     return entries
 
-# ----------------------------
 # Heuristic parser for \bibitem text
-# ----------------------------
 def heuristic_parse_reference(text: str) -> Dict[str, str]:
     fields = {}
 
@@ -91,9 +83,7 @@ def heuristic_parse_reference(text: str) -> Dict[str, str]:
 
     return fields
 
-# ----------------------------
 # Parse \bibitem blocks
-# ----------------------------
 def parse_bibitem_block(content: str) -> Dict[str, Reference_Entry]:
     refs = {}
     for m in BIBITEM_RE.finditer(content):
@@ -103,9 +93,7 @@ def parse_bibitem_block(content: str) -> Dict[str, Reference_Entry]:
         refs[key] = Reference_Entry(key=key, entry_type="misc", fields=fields, source="bibitem")
     return refs
 
-# ----------------------------
 # Collect references from .bib and .tex files
-# ----------------------------
 def collect_references(tex_files) -> Dict[str, Reference_Entry]:
     references = {}
 
@@ -127,7 +115,7 @@ def collect_references(tex_files) -> Dict[str, Reference_Entry]:
 
 if __name__ == "__main__":
     tex_path = [
-        "../../demo-data/2212-11479/tex/2212.11479v1/DifferentialPrivate_Social_network.tex"
+        "../../demo-data/2212-11476/tex/2212.11476v1/ref.bib"
     ]
     refs = collect_references(tex_path)
     for k, v in refs.items():
