@@ -4,6 +4,7 @@ from parser.Latex_Parser import Latex_Parser
 from utils.reference_extraction import collect_references, Reference_Entry
 from utils.deduplicate_reference import canonical_ref_id, deduplicate_references
 from parser.Hierarchy_Tree import Node, Hierarchy_Tree
+from parser.Publication_Graph import Publication_Graph
 
 # ---------- Build tree & extract references for one version ----------
 def build_tree_and_refs(tex_dir):
@@ -53,8 +54,8 @@ def print_tree(node, indent=0):
 if __name__ == "__main__":
     # Example: paths to two versions
     versions = [
-        "../demo-data/2212-11479/tex/2212.11479v1",
-        "../demo-data/2212-11479/tex/2212.11479v2"
+        "../demo-data/2212-11476/tex/2212.11476v1",
+        "../demo-data/2212-11476/tex/2212.11476v2"
     ]
 
     all_trees = []
@@ -78,3 +79,9 @@ if __name__ == "__main__":
     # 3. Update \cite{} in all trees
     for tree_root in all_trees:
         update_tree_cites(tree_root, key_map)
+
+    graph = Publication_Graph(pub_id="2212.11476")
+    graph.add_tree(all_trees[0], version_index=1)
+    graph.add_tree(all_trees[1], version_index=2)
+
+    graph.export_json("hierarchy.json")
