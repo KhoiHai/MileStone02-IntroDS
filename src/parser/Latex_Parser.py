@@ -1,5 +1,4 @@
 from utils.parsing import *
-from utils.cleaning import *
 from .Hierarchy_Tree import Node, Hierarchy_Tree
 
 class Latex_Parser:
@@ -7,67 +6,58 @@ class Latex_Parser:
         self.tree = Hierarchy_Tree()
 
     def parse(self, text: str):
-        lines = text.splitlines()
-        i = 0
+        cleaned_text = preprocess_text(text)
+        paragraphs = split_into_paragraphs(cleaned_text)
 
-        while i < len(lines):
-            line = lines[i].strip()
+        for block in paragraphs:
+            block_strip = block.strip()
+            lines = block_strip.splitlines()
+            first_line = lines[0].strip()
 
-            # Abstract (container with children)
-            if ABSTRACT_BEGIN_RE.search(line):
-                content, i = parse_block(lines, i, ABSTRACT_BEGIN_RE, ABSTRACT_END_RE)
-                children = split(content)
+            # Abstract
+            if ABSTRACT_BEGIN_RE.search(block_strip):
+                children = split_paragraph(block)
                 self.tree.add_container_node("Abstract", "Abstract", children)
                 continue
 
-            # Appendix (treated as top-level section, children later)
-            if APPENDIX_RE.search(line):
+            # Appendix
+            if APPENDIX_RE.search(block_strip):
                 self.tree.add_hierarchy_node("Section", "Appendix")
-                i += 1
                 continue
 
             # Section hierarchy
-            level, title = parse_title(line)
+            level, title = parse_title(first_line)
             if level:
                 self.tree.add_hierarchy_node(level, title)
-                i += 1
                 continue
 
-            # Theorem
-            if THEOREM_BEGIN_RE.match(line):
-                m_th = THEOREM_BEGIN_RE.match(line)
+            # Theorem / Lemma
+            if THEOREM_BEGIN_RE.match(first_line):
+                m_th = THEOREM_BEGIN_RE.match(first_line)
                 title = m_th.group(2) or "Theorem"
-                content, i = parse_block(lines, i, THEOREM_BEGIN_RE, THEOREM_END_RE)
-                children = split(content)
+                children = split_paragraph(block)
                 self.tree.add_container_node("Theorem", title, children)
                 continue
 
-            # Lemma
-            if LEMMA_BEGIN_RE.match(line):
-                m_lm = LEMMA_BEGIN_RE.match(line)
+            if LEMMA_BEGIN_RE.match(first_line):
+                m_lm = LEMMA_BEGIN_RE.match(first_line)
                 title = m_lm.group(2) or "Lemma"
-                content, i = parse_block(lines, i, LEMMA_BEGIN_RE, LEMMA_END_RE)
-                children = split(content)
+                children = split_paragraph(block)
                 self.tree.add_container_node("Lemma", title, children)
                 continue
 
             # Block math
-            if BLOCK_MATH_BEGIN_RE.search(line):
-                content, i = parse_block(lines, i, BLOCK_MATH_BEGIN_RE, BLOCK_MATH_END_RE)
-                self.tree.add_leaf("Equation", content)
+            if BLOCK_MATH_BEGIN_RE.search(first_line):
+                self.tree.add_leaf("Equation", block)
                 continue
 
             # Figure / Table
-            if FIGURE_BEGIN_RE.search(line) or TABLE_BEGIN_RE.search(line):
-                end_re = FIGURE_END_RE if FIGURE_BEGIN_RE.search(line) else TABLE_END_RE
-                content, i = parse_block(lines, i, FIGURE_BEGIN_RE if FIGURE_BEGIN_RE.search(line) else TABLE_BEGIN_RE, end_re)
-                self.tree.add_leaf("Figure", content)
+            if FIGURE_BEGIN_RE.search(first_line) or TABLE_BEGIN_RE.search(first_line):
+                self.tree.add_leaf("Figure", block)
                 continue
 
-            # Regular paragraph / sentences / inline math
-            if line:
-                for node_type, content in split(line):
-                    self.tree.add_leaf(node_type, content)
-            i += 1
+            # Regular paragraph
+            for node_type, content in split_paragraph(block):
+                self.tree.add_leaf(node_type, content)
 
         return self.tree.root

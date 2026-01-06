@@ -1,6 +1,7 @@
 import re
+from .cleaning import *
 
-# Chapter, Section, Subsection and Subsubsection Regex
+# Chapter, section, subsection and subsubsection regex
 CHAPTER_RE = re.compile(r'\\chapter\*?\{(.+?)\}')
 SECTION_RE = re.compile(r'\\section\*?\{(.+?)\}')
 SUBSECTION_RE = re.compile(r'\\subsection\*?\{(.+?)\}')
@@ -19,11 +20,6 @@ BLOCK_MATH_END_RE = re.compile(
     r'\\end\{(equation|equation\*|align|align\*|gather|multline)\}'
 )
 
-INLINE_DISPLAY_MATH_RE = re.compile(
-    r'(\$\$.*?\$\$|\\\[.*?\\\]|\\begin\{(equation|equation\*|align|align\*|gather|multline)\}.*?\\end\{\2\})',
-    re.DOTALL
-)
-
 # Figure Regex
 FIGURE_BEGIN_RE = re.compile(r'\\begin\{figure\*?\}')
 FIGURE_END_RE = re.compile(r'\\end\{figure\*?\}')
@@ -38,7 +34,24 @@ THEOREM_END_RE = re.compile(r'\\end\{theorem\}')
 LEMMA_BEGIN_RE = re.compile(r'\\begin\{lemma\}(\[(.*?)\])?')
 LEMMA_END_RE = re.compile(r'\\end\{lemma\}')
 
-# Parsing the title of the container node
+# Split the text into paragraphs
+def split_into_paragraphs(text):
+    lines = text.splitlines()
+    paragraphs = []
+    current = []
+
+    for line in lines:
+        if not line.strip(): 
+            if current:
+                paragraphs.append("\n".join(current))
+                current = []
+        else:
+            current.append(line)
+    if current:
+        paragraphs.append("\n".join(current))
+    return paragraphs
+
+# Parse the title if the node has 
 def parse_title(line):
     for regex, level in [
         (CHAPTER_RE, "Chapter"),
@@ -51,62 +64,64 @@ def parse_title(line):
             return level, m.group(1)
     return None, None
 
-# Parsing the plot of the given container node
-def parse_block(lines, i, begin_re, end_re):
-    block = [lines[i]]
-    i += 1
-    while i < len(lines) and not end_re.search(lines[i]):
-        block.append(lines[i])
-        i += 1
-    if i < len(lines):
-        block.append(lines[i])
-    content = "\n".join(block)
-    return content, i + 1
-
-# Splitting the sentences along with math block inside
-def split_sentences(text):
-    parts = re.split(r'(?<=[.!?])\s+', text)
-    return [p.strip() for p in parts if len(p.strip()) > 3]
-
+# Merge multine math 
 def merge_multiline_display_math(text):
+    """Merge multi-line \[...\] math into a single line."""
     pattern = re.compile(r'\\\[(.*?)\\\]', re.DOTALL)
     def replacer(m):
-        content = m.group(1).replace("\n", " ").strip()
-        return f"\\[{content}\\]"
+        content = m.group(1)
+        content = re.sub(r'%.*', '', content)
+        content = re.sub(r'\s+', ' ', content)
+        return f"\\[{content.strip()}\\]"
     return pattern.sub(replacer, text)
 
-def split(text):
-    # Merge multiline \[ ... \] first
-    text = merge_multiline_display_math(text)
+def merge_multiline_env_math(text):
+    """Merge multi-line \begin{env}...\end{env} math into a single line."""
+    pattern = re.compile(
+        r'\\begin\{(equation\*?|align\*?|gather|multline)\}(.*?)\\end\{\1\}',
+        re.DOTALL
+    )
+    def replacer(m):
+        env = m.group(1)
+        content = m.group(2)
+        content = re.sub(r'%.*', '', content)       
+        content = re.sub(r'\s+', ' ', content)  
+        return f"\\begin{{{env}}}{content.strip()}\\end{{{env}}}"
+    return pattern.sub(replacer, text)
+
+# Split the paragraph to components 
+def split_sentences(text):
+    """Split normal text (outside math) into sentences."""
+    parts = re.split(r'(?<=[.!?])\s+', text)
+    return [p.strip() for p in parts if p.strip()]
+
+def split_paragraph(paragraph):
+    paragraph = paragraph.strip()
+    paragraph = merge_multiline_display_math(paragraph)
+    paragraph = merge_multiline_env_math(paragraph)
 
     result = []
     pos = 0
 
-    # Regex match all math types
-    pattern = re.compile(
-        r'(\\begin\{(equation|equation\*|align|align\*|gather|multline)\}.*?\\end\{\2\})'  # \begin{...}...\end{...}
-        r'|(\$\$.*?\$\$)'                       # $$...$$
-        r'|(\\\[.*?\\\])',                      # \[...\]
+    math_pattern = re.compile(
+        r'(\\begin\{(equation|equation\*|align|align\*|gather|multline)\}.*?\\end\{\2\}|\\\[.*?\\\])',
         re.DOTALL
     )
 
-    for m in pattern.finditer(text):
-        # Text before math block
+    for m in math_pattern.finditer(paragraph):
         if m.start() > pos:
-            before = text[pos:m.start()]
-            for s in split_sentences(before):
-                result.append(("Sentence", s))
-
-        # Math block matched
-        eq = m.group(1) or m.group(3) or m.group(4)
+            before = paragraph[pos:m.start()]
+            if before.strip():
+                for s in split_sentences(before):
+                    result.append(("Sentence", s))
+        eq = m.group(0).strip()
         result.append(("Equation", eq))
-
         pos = m.end()
 
-    # Remaining text after last math block
-    if pos < len(text):
-        remaining = text[pos:]
-        for s in split_sentences(remaining):
-            result.append(("Sentence", s))
+    if pos < len(paragraph):
+        remaining = paragraph[pos:]
+        if remaining.strip():
+            for s in split_sentences(remaining):
+                result.append(("Sentence", s))
 
     return result
