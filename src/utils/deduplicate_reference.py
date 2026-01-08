@@ -35,12 +35,10 @@ def deduplicate_references(
             canonical_map[best_match_key].merged_from.append(ref.key)
             key_map[key] = canonical_map[best_match_key].key
             similarity_list.append((key, canonical_map[best_match_key].key, best_sim))
-            print(f"[MATCH] {key} -> {canonical_map[best_match_key].key}, similarity={best_sim:.3f}")
         else:
             # New canonical reference
             canonical_map[ref.key] = ref
             key_map[key] = ref.key
-            print(f"[NEW] {key} -> {ref.key}")
 
     print(f"\nTotal canonical references: {len(canonical_map)}")
     return canonical_map, key_map, similarity_list
