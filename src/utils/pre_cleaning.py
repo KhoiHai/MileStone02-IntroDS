@@ -16,7 +16,7 @@ def preprocess_text(text: str) -> str:
         if stripped.startswith("%"):
             continue
 
-        # Keep everything else untouched
+        # Keep everything else
         out.append(line)
 
     return "\n".join(out)

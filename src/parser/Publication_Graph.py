@@ -3,18 +3,28 @@ from collections import defaultdict
 from parser.Hierarchy_Tree import Node
 from typing import List
 
-# This is the final graph when we merge the trees
 class Publication_Graph:
     def __init__(self, pub_id: str):
         self.pub_id = pub_id
-        self.elements = {}  # element_id -> report/content
-        self.hierarchy = defaultdict(dict)  # version_index -> {child_id: parent_id}
-        self.content_to_id = {}  # deduplicate by node.report()
+        self.elements = {}
+        self.hierarchy = defaultdict(dict) 
+        self.content_to_id = {} 
         self.counter = 0
 
-    # Each element(node) will be generated with distinct ID
-    def _generate_element_id(self, node_report: str, node_type: str) -> str:
-        key = (node_report, node_type)
+    def subtree_signature(self, node: Node) -> str:
+        if node.is_leaf():
+            return f"<{node.node_type}:{node.report()}>"
+        child_sigs = ",".join(self.subtree_signature(c) for c in node.children)
+        return f"<{node.node_type}:{node.report()}:[{child_sigs}]>"
+
+    def _generate_element_id(self, node: Node, is_root=False) -> str:
+        node_type = node.node_type
+        if is_root:
+            self.counter += 1
+            return f"{self.pub_id}-{node_type}-el{self.counter}"
+
+        sig = self.subtree_signature(node)
+        key = (sig, node_type)
         if key in self.content_to_id:
             return self.content_to_id[key]
 
@@ -23,54 +33,38 @@ class Publication_Graph:
         self.content_to_id[key] = element_id
         return element_id
 
-    # Traverse the tree for adding elements
-    def _traverse_tree(self, node: Node, version_index: int, parent_id=None):
-        node_report = node.report()
-        node_type = node.node_type
-        element_id = self._generate_element_id(node_report, node_type)
-
-        # Add element
-        self.elements[element_id] = node_report
-
-        # Record hierarchy for this version
+    def _traverse_tree(self, node: Node, version_index: int, parent_id=None, is_root=False):
+        element_id = self._generate_element_id(node, is_root=is_root)
+        self.elements[element_id] = node.report()
         self.hierarchy[version_index][element_id] = parent_id
 
-        # Recurse on children
         for child in node.children:
             self._traverse_tree(child, version_index, parent_id=element_id)
 
-    # Add a tree
     def add_tree(self, root: Node, version_index: int):
-        """Add a tree of a specific version"""
-        self._traverse_tree(root, version_index)
+        self._traverse_tree(root, version_index, parent_id=None, is_root=True)
 
-    # Merge multi graph
     def merge_graphs(self, graphs: List["Publication_Graph"], version_indices: List[int]):
         for g, v_idx in zip(graphs, version_indices):
-            for (old_content, old_type), old_id in g.content_to_id.items():
-                eid = self._generate_element_id(old_content, old_type)
-                self.elements[eid] = old_content
-
             for ver, hdict in g.hierarchy.items():
-                new_hierarchy = {}
                 for child_old_id, parent_old_id in hdict.items():
-                    child_content = g.elements[child_old_id]
-                    # Extract node_type from old_id
-                    node_type = child_old_id.split('-')[1] if '-' in child_old_id else "Node"
-                    child_id = self._generate_element_id(child_content, node_type)
+                    # reconstruct Node with children if possible (for subtree_signature)
+                    child_node_report = g.elements[child_old_id]
+                    child_node = Node("Node", title=child_node_report)
+                    child_id = self._generate_element_id(child_node)
 
                     parent_id = None
                     if parent_old_id:
-                        parent_content = g.elements[parent_old_id]
-                        parent_type = parent_old_id.split('-')[1] if '-' in parent_old_id else "Node"
-                        parent_id = self._generate_element_id(parent_content, parent_type)
+                        parent_report = g.elements[parent_old_id]
+                        parent_node = Node("Node", title=parent_report)
+                        parent_id = self._generate_element_id(parent_node)
 
-                    new_hierarchy[child_id] = parent_id
-                self.hierarchy[v_idx].update(new_hierarchy)
+                    # Set hierarchy for this version
+                    self.hierarchy[v_idx][child_id] = parent_id
+                    # Add element content if missing
+                    self.elements[child_id] = child_node_report
 
-    # Export the json files contain the node and edges itself
     def export_json(self, path: str):
-        # convert version indices to string keys
         hierarchy_dict = {str(v): dict(d) for v, d in self.hierarchy.items()}
         out = {
             "elements": self.elements,

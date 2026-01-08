@@ -61,7 +61,6 @@ class Node:
             count += child.count_nodes()
         return count
 
-    '''
     def report(self):
         if self.is_leaf():
             return f"<{self.node_type}: {self.content}>"
@@ -71,6 +70,7 @@ class Node:
         if self.is_leaf():
             return f"{self.content}"
         return f"{self.title}"
+    '''
 
 # Class for Hierarchy Tree 
 class Hierarchy_Tree:
@@ -81,8 +81,12 @@ class Hierarchy_Tree:
     # Add the node itself does not has the end and the begin
     def add_hierarchy_node(self, level, title):
         node = Node(level, title=title)
-        while len(self.stack) > self._level(level):
+        level_depth = self._level(level)
+
+        # Pop stack until we find correct parent level
+        while len(self.stack) > 1 and self._level(self.stack[-1].node_type) >= level_depth:
             self.stack.pop()
+
         self.stack[-1].add_child(node)
         self.stack.append(node)
 
