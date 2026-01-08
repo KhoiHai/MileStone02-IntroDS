@@ -18,7 +18,7 @@ for pub_folder in os.listdir(dataset_path):
     parser = Publication_Parser(pub_id=pub_folder, pub_path=pub_path)
     parser.parse_dataset()  # build trees, merge, extract refs
 
-    # Lưu success rate của publication
+    # Success rate of publication
     all_pub_success_rates.append(parser.success_rate)
     print(f"[INFO] Publication '{pub_folder}' parsing success rate: {parser.success_rate:.2f}%")
 
@@ -29,13 +29,13 @@ for pub_folder in os.listdir(dataset_path):
     parser.export_bib(bib_file)
     print(f"Exported: {json_file} and {bib_file}")
 
-    # Xoá folder tex nếu cần
+    # Delete folder tex
     tex_path = os.path.join(pub_path, "tex")
     if os.path.exists(tex_path) and os.path.isdir(tex_path):
         shutil.rmtree(tex_path)
         print(f"Deleted folder: {tex_path}")
 
-# Tính success rate trung bình trên tất cả publications
+# Calculate success rate
 if all_pub_success_rates:
     overall_rate = sum(all_pub_success_rates) / len(all_pub_success_rates)
     print(f"\n=== Overall parsing success rate across all publications: {overall_rate:.2f}% ===")
