@@ -26,13 +26,17 @@ class Publication_Parser:
         tex_root = os.path.join(self.pub_path, "tex")
         if not os.path.exists(tex_root):
             print(f"[WARN] No tex folder in {self.pub_path}")
+            self.success_rate = 0.0
+            self.version_success_rates = []
             return
 
-        # Find all version
+        # Find all versions
         versions = [f for f in os.listdir(tex_root) if os.path.isdir(os.path.join(tex_root, f))]
         versions.sort()
 
-        # Build the tree and collect the reference
+        self.version_success_rates = []
+
+        # Build the tree and collect references
         for idx, v in enumerate(versions, start=1):
             version_path = os.path.join(tex_root, v)
             print(f"[INFO] Processing version {v}")
@@ -41,8 +45,12 @@ class Publication_Parser:
             main_tex, _ = collect_tex_file(version_path)
             if not main_tex:
                 print(f"[WARN] No main tex in {version_path}")
+                self.version_success_rates.append(0.0)
                 continue
             tex_files = dfs_collect(main_tex)
+
+            total_tex = len(tex_files)
+            success_tex = 0
 
             # Build tree
             parser = Latex_Parser()
@@ -50,6 +58,7 @@ class Publication_Parser:
                 try:
                     with open(f, encoding="utf-8", errors="ignore") as fp:
                         parser.parse(fp.read())
+                    success_tex += 1
                 except Exception as e:
                     print(f"[ERROR] Failed to parse {f}: {e}")
 
@@ -65,6 +74,11 @@ class Publication_Parser:
             refs = collect_references(all_files)
             self.references.update(refs)
 
+            # Success rate of this version
+            version_rate = (success_tex / total_tex * 100) if total_tex > 0 else 0.0
+            self.version_success_rates.append(version_rate)
+            print(f"[INFO] Version {v} success rate: {version_rate:.2f}% ({success_tex}/{total_tex})")
+
         # Deduplicate references across all versions
         canonical_refs, key_map, _ = deduplicate_references(self.references)
         self.references = canonical_refs
@@ -73,19 +87,23 @@ class Publication_Parser:
         for tree_root in self.trees:
             tree_root.update_cite_keys(key_map)
 
-        # Add all trees to graph (full-text dedup works here)
+        # Add all trees to graph
         for idx, tree_root in enumerate(self.trees, start=1):
             self.graph.add_tree(tree_root, version_index=idx)
 
+        # Overall success rate = trung bình cộng success rate từng version
+        self.success_rate = sum(self.version_success_rates) / len(self.version_success_rates) if self.version_success_rates else 0.0
+        print(f"[INFO] Overall parsing success rate: {self.success_rate:.2f}%")
+
+    # Export merged graph to JSON
     def export_json(self, path: str):
-        """Export merged graph to JSON"""
         self.graph.export_json(path)
 
+    # Export all references (canonical) to .bib
     def export_bib(self, path: str):
-        """Export all references (canonical) to .bib"""
         with open(path, "w", encoding="utf-8") as f:
             for key, ref in self.references.items():
-                f.write(f"@{ref.entry_type}{{{key},\n")  # dùng key gốc
+                f.write(f"@{ref.entry_type}{{{key},\n")  
                 if hasattr(ref, "merged_from") and ref.merged_from:
                     f.write(f"  % Merged from: {', '.join(ref.merged_from)}\n")
                 for k, v in ref.fields.items():

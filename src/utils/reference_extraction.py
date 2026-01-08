@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Dict
 import bibtexparser
 
+MAX_BIB_FILE_SIZE_MB = 2         
+MAX_BIB_LINES = 20000           
+MAX_BIB_ENTRIES = 2000         
+
 # Class for storing reference
 @dataclass
 class Reference_Entry:
@@ -11,6 +15,33 @@ class Reference_Entry:
     entry_type: str
     fields: Dict[str, str]
     source: str
+
+def skip_bib_file(bib_path: str) -> bool:
+    try:
+        size_mb = os.path.getsize(bib_path) / (1024 * 1024)
+        if size_mb > MAX_BIB_FILE_SIZE_MB:
+            print(f"[SKIP] {bib_path}: file too large ({size_mb:.2f} MB)")
+            return True
+
+        with open(bib_path, encoding="utf-8", errors="ignore") as f:
+            lines = 0
+            entries = 0
+            for line in f:
+                lines += 1
+                if line.lstrip().startswith("@"):
+                    entries += 1
+
+                if lines > MAX_BIB_LINES:
+                    print(f"[SKIP] {bib_path}: too many lines ({lines})")
+                    return True
+                if entries > MAX_BIB_ENTRIES:
+                    print(f"[SKIP] {bib_path}: too many entries ({entries})")
+                    return True
+
+        return False
+    except Exception as e:
+        print(f"[WARN] Cannot inspect bib file {bib_path}: {e}")
+        return True
 
 # The code for parsing the reference inside bib
 def parse_bibtex(content: str) -> Dict[str, Reference_Entry]:
@@ -105,20 +136,32 @@ def parse_bibitem_block(content: str) -> Dict[str, Reference_Entry]:
 def collect_references(tex_files) -> Dict[str, Reference_Entry]:
     references = {}
 
-    # 1. Parse .bib files
+    # 1. Parse .bib files 
     for f in tex_files:
         if f.endswith(".bib") and os.path.exists(f):
-            with open(f, encoding="utf-8", errors="ignore") as fp:
-                references.update(parse_bibtex(fp.read()))
 
-    # 2. Parse \bibitem in .tex files
+            if skip_bib_file(f):
+                continue
+
+            try:
+                with open(f, encoding="utf-8", errors="ignore") as fp:
+                    content = fp.read()
+                references.update(parse_bibtex(content))
+            except Exception as e:
+                print(f"[WARN] Failed parsing bib file {f}: {e}")
+
+    # 2. Parse \bibitem in .tex files 
     for f in tex_files:
         if f.endswith(".tex") and os.path.exists(f):
-            with open(f, encoding="utf-8", errors="ignore") as fp:
-                content = fp.read()
-            if "\\bibitem" in content:
-                print(f"Parsing bibitems in {f}")
-                references.update(parse_bibitem_block(content))
+            try:
+                with open(f, encoding="utf-8", errors="ignore") as fp:
+                    content = fp.read()
+
+                if "\\bibitem" in content:
+                    print(f"Parsing bibitems in {f}")
+                    references.update(parse_bibitem_block(content))
+            except Exception as e:
+                print(f"[WARN] Failed parsing bibitems in {f}: {e}")
 
     return references
 
