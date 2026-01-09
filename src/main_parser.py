@@ -1,8 +1,16 @@
 import os
 import shutil
 from parser.Publication_Parser import Publication_Parser
+import stat
 
-dataset_path = "../data"
+def force_remove(func, path, excinfo):
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception:
+        pass
+
+dataset_path = "../2301.751-1500"
 
 all_pub_success_rates = []
 
@@ -32,8 +40,11 @@ for pub_folder in os.listdir(dataset_path):
     # Delete folder tex
     tex_path = os.path.join(pub_path, "tex")
     if os.path.exists(tex_path) and os.path.isdir(tex_path):
-        shutil.rmtree(tex_path)
-        print(f"Deleted folder: {tex_path}")
+        try:
+            shutil.rmtree(tex_path, onerror=force_remove)
+            print(f"Deleted folder: {tex_path}")
+        except Exception as e:
+            print(f"[WARN] Failed to delete tex folder {tex_path}: {e}")
 
 # Calculate success rate
 if all_pub_success_rates:
